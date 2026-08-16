@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Balance — Sistema de déficit calórico</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg: #12151a;
+    --panel: #1a1f27;
+    --panel-2: #202631;
+    --border: #2a323e;
+    --text: #e9ecf1;
+    --muted: #8b94a3;
+    --muted-2: #5f6773;
+    --teal: #4dd0c0;
+    --teal-dim: #2c5952;
+    --amber: #f2a93c;
+    --amber-dim: #4a3a1c;
+    --red: #e2685f;
+    --red-dim: #3d2422;
+    --green: #6fcf7a;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(77,208,192,0.08), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 0%, rgba(242,169,60,0.05), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:'JetBrains Mono', monospace;}
+  .wrap{max-width:980px; margin:0 auto; padding:28px 20px 80px;}
+
+  header.top{display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:22px; flex-wrap:wrap;}
+  .brand h1{
+    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:26px; margin:0 0 4px;
+    letter-spacing:-0.02em;
+  }
+  .brand h1 span{color:var(--teal);}
+  .brand p{margin:0; color:var(--muted); font-size:13px;}
+
+  nav.tabs{
+    display:flex; gap:4px; background:var(--panel); border:1px solid var(--border);
+    border-radius:10px; padding:4px; flex-wrap:wrap;
+  }
+  nav.tabs button{
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13px;
+    background:transparent; border:none; color:var(--muted); padding:9px 14px;
+    border-radius:7px; cursor:pointer; transition:all .15s ease;
+  }
+  nav.tabs button:hover{color:var(--text);}
+  nav.tabs button.active{background:var(--teal); color:#0d1512;}
+
+  section.view{display:none;}
+  section.view.active{display:block; animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
+
+  .card{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    padding:20px; margin-bottom:16px;
+  }
+  .card h2{
+    font-family:'Space Grotesk', sans-serif; font-size:15px; margin:0 0 14px;
+    display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--text);
+  }
+  .card h2 .eyebrow{
+    font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:0.08em;
+    color:var(--muted-2); text-transform:uppercase; font-weight:600;
+  }
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}
+  @media (max-width:640px){ .grid2, .grid3{grid-template-columns:1fr;} }
+
+  label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:500;}
+  input[type=number], input[type=date], input[type=text], input[type=url], select{
+    width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:8px;
+    padding:10px 11px; color:var(--text); font-family:'JetBrains Mono', monospace; font-size:14px;
+    outline:none; transition:border-color .15s;
+  }
+  input[type=text], input[type=url]{font-family:'Inter',sans-serif;}
+  input:focus, select:focus{border-color:var(--teal);}
+  .field{margin-bottom:14px;}
+
+  .toggle-row{display:flex; gap:8px;}
+  .toggle-row button{
+    flex:1; padding:10px; border-radius:8px; border:1px solid var(--border);
+    background:var(--panel-2); color:var(--muted); font-weight:600; font-size:13px; cursor:pointer;
+    font-family:'Inter',sans-serif;
+  }
+  .toggle-row button.on{background:var(--teal-dim); border-color:var(--teal); color:var(--teal);}
+
+  .btn{
+    background:var(--teal); color:#0d1512; border:none; border-radius:9px; padding:12px 18px;
+    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:14px; cursor:pointer; width:100%;
+    transition:opacity .15s;
+  }
+  .btn:hover{opacity:.9;}
+  .btn.secondary{background:var(--panel-2); color:var(--text); border:1px solid var(--border);}
+  .btn.small{width:auto; padding:8px 14px; font-size:12px;}
+
+  .live-readout{
+    margin-top:14px; padding:14px; border-radius:10px; background:var(--panel-2);
+    border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;
+  }
+  .live-readout .num{font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:700;}
+  .live-readout .lbl{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em;}
+  .pos{color:var(--teal);} .neg{color:var(--red);}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th{text-align:left; color:var(--muted-2); font-weight:600; font-size:10px; text-transform:uppercase;
+     letter-spacing:.05em; padding:6px 8px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--panel);}
+  td{padding:8px; border-bottom:1px solid rgba(255,255,255,0.04); font-family:'JetBrains Mono',monospace;}
+  tr:hover td{background:rgba(255,255,255,0.02); cursor:pointer;}
+  .table-scroll{max-height:520px; overflow-y:auto; border-radius:8px;}
+
+  .kpi{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px;}
+  .kpi .lbl{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:8px;}
+  .kpi .val{font-family:'JetBrains Mono',monospace; font-weight:700; font-size:24px;}
+  .kpi .sub{font-size:11px; color:var(--muted-2); margin-top:4px;}
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px;}
+  @media (max-width:760px){ .kpis{grid-template-columns:repeat(2,1fr);} }
+
+  .beam-wrap{padding:22px 10px 10px;}
+  .beam-labels{display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:12px; margin-bottom:10px; color:var(--muted);}
+  .beam-track{position:relative; height:10px; background:var(--panel-2); border-radius:6px; border:1px solid var(--border); overflow:visible;}
+  .beam-fill{position:absolute; top:0; bottom:0; border-radius:6px; background:linear-gradient(90deg, var(--teal), var(--amber));}
+  .beam-marker{position:absolute; top:-16px; width:2px; height:42px; background:var(--text); opacity:.4;}
+  .beam-marker::after{content:''; position:absolute; top:-4px; left:-3px; width:8px; height:8px; border-radius:50%; background:var(--text);}
+  .beam-caption{display:flex; justify-content:space-between; margin-top:14px; font-size:12px; color:var(--muted-2);}
+
+  .alert{
+    display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border-radius:10px;
+    margin-bottom:8px; font-size:13px; border:1px solid;
+  }
+  .alert.warn{background:var(--amber-dim); border-color:#5c4520; color:#f2c98a;}
+  .alert.bad{background:var(--red-dim); border-color:#5c2f2b; color:#f0a89f;}
+  .alert.ok{background:var(--teal-dim); border-color:#2c5952; color:#9fe6da;}
+  .alert .dot{width:6px; height:6px; border-radius:50%; margin-top:5px; flex-shrink:0; background:currentColor;}
+
+  .rec-box{
+    background:var(--panel-2); border:1px solid var(--teal); border-radius:10px; padding:16px;
+    font-size:14px; line-height:1.5;
+  }
+  .rec-box .eyebrow{font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--teal); text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px; display:block;}
+
+  canvas{max-height:260px;}
+  .empty{color:var(--muted-2); font-size:13px; text-align:center; padding:24px 0;}
+  .footer-actions{display:flex; gap:8px; margin-top:6px; flex-wrap:wrap;}
+  .config-note{font-size:12px; color:var(--muted-2); margin-top:6px; line-height:1.5;}
+  .sync-status{font-size:11px; margin-top:8px; color:var(--muted-2);}
+  .sync-status.ok{color:var(--teal);}
+  .legend-scale{display:flex; align-items:center; gap:6px; font-size:10px; color:var(--muted-2); font-family:'JetBrains Mono',monospace;}
+  .legend-bar{width:90px; height:8px; border-radius:4px; background:linear-gradient(90deg, hsl(0,65%,55%), hsl(40,65%,55%), hsl(140,55%,50%), hsl(30,65%,55%), hsl(5,65%,55%));}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <h1>Balance<span>.</span></h1>
+      <p>Déficit calórico basado en calorías del Watch · peso y cintura semanales</p>
+    </div>
+    <nav class="tabs">
+      <button data-tab="hoy" class="active">Hoy</button>
+      <button data-tab="semana">Semana</button>
+      <button data-tab="historial">Historial</button>
+      <button data-tab="dashboard">Dashboard</button>
+      <button data-tab="config">Config</button>
+    </nav>
+  </header>
+
+  <!-- ============ HOY ============ -->
+  <section class="view active" id="view-hoy">
+    <div class="card">
+      <h2><span class="eyebrow">Registro diario</span><span id="d-edit-flag" style="display:none; font-size:11px; color:var(--amber);">editando registro existente</span></h2>
+      <div class="field">
+        <label>Fecha</label>
+        <input type="date" id="d-fecha">
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>Calorías ingeridas</label>
+          <input type="number" id="d-cal-in" placeholder="2100">
+        </div>
+        <div class="field">
+          <label>Calorías totales (Apple Watch)</label>
+          <input type="number" id="d-cal-watch" placeholder="2600">
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>Proteína (g)</label>
+          <input type="number" id="d-protein" placeholder="160">
+        </div>
+        <div class="field">
+          <label>¿Entrenaste?</label>
+          <div class="toggle-row">
+            <button type="button" id="d-train-yes" onclick="setTrain(true)">Sí</button>
+            <button type="button" id="d-train-no" onclick="setTrain(false)">No</button>
+          </div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Nota (opcional)</label>
+        <input type="text" id="d-note" placeholder="cené afuera, mucho estrés, etc.">
+      </div>
+
+      <div class="live-readout">
+        <div>
+          <div class="lbl">Déficit / superávit del día</div>
+          <div class="num" id="d-live-deficit">—</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="lbl">Proteína vs objetivo</div>
+          <div class="num" id="d-live-protein">—</div>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <button class="btn" onclick="saveDaily()">Guardar día</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Últimos 7 días</span></h2>
+      <div id="daily-table-wrap"><p class="empty">Todavía no hay registros.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ SEMANA ============ -->
+  <section class="view" id="view-semana">
+    <div class="card">
+      <h2><span class="eyebrow">Registro semanal</span></h2>
+      <div class="field">
+        <label>Semana (lunes de esa semana)</label>
+        <input type="date" id="w-fecha">
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>Peso corporal (kg)</label>
+          <input type="number" step="0.1" id="w-peso" placeholder="78.4">
+        </div>
+        <div class="field">
+          <label>Perímetro de cintura (cm)</label>
+          <input type="number" step="0.1" id="w-cintura" placeholder="86.5">
+        </div>
+      </div>
+      <button class="btn" onclick="saveWeekly()">Guardar semana</button>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Historial semanal</span></h2>
+      <div id="weekly-table-wrap"><p class="empty">Todavía no hay registros.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ HISTORIAL (día por día completo) ============ -->
+  <section class="view" id="view-historial">
+    <div class="card">
+      <h2>
+        <span class="eyebrow">Historial completo · día por día</span>
+        <span class="legend-scale"><span>superávit</span><span class="legend-bar"></span><span>déficit extremo</span></span>
+      </h2>
+      <p class="config-note">Tocá una fila para cargarla en la pestaña Hoy y editarla.</p>
+      <div id="historial-table-wrap"><p class="empty">Todavía no hay registros.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ DASHBOARD ============ -->
+  <section class="view" id="view-dashboard">
+
+    <div class="kpis" id="kpi-row"></div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Última semana cerrada</span> · esperado vs. real</h2>
+      <div id="beam-container"><p class="empty">Cargá al menos dos semanas de peso para ver esta comparación.</p></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Tendencia</span> · peso semanal (kg)</h2>
+      <canvas id="chart-weight"></canvas>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Tendencia</span> · déficit acumulado semanal (kcal)</h2>
+      <canvas id="chart-deficit"></canvas>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Tendencia</span> · cintura (cm)</h2>
+      <canvas id="chart-waist"></canvas>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Historial semanal</span></h2>
+      <div id="dash-weekly-wrap"><p class="empty">Sin datos todavía.</p></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Historial mensual</span></h2>
+      <div id="dash-monthly-wrap"><p class="empty">Sin datos todavía.</p></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Alertas</span></h2>
+      <div id="alerts-wrap"><p class="empty">Sin alertas activas todavía.</p></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Recomendación de la semana</span></h2>
+      <div class="rec-box" id="rec-box"><span class="eyebrow">Sistema</span>Cargando…</div>
+    </div>
+  </section>
+
+  <!-- ============ CONFIG ============ -->
+  <section class="view" id="view-config">
+    <div class="card">
+      <h2><span class="eyebrow">Objetivos</span></h2>
+      <div class="grid3">
+        <div class="field">
+          <label>Objetivo calorías/día</label>
+          <input type="number" id="c-cal-target">
+        </div>
+        <div class="field">
+          <label>Objetivo proteína/día (g)</label>
+          <input type="number" id="c-protein-target">
+        </div>
+        <div class="field">
+          <label>Déficit objetivo/día (kcal)</label>
+          <input type="number" id="c-deficit-target">
+        </div>
+      </div>
+      <button class="btn" onclick="saveConfig()">Guardar objetivos</button>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Google Sheets (sincronización)</span></h2>
+      <p class="config-note">
+        Pegá acá la URL del Web App de Apps Script (ver instrucciones del script). Cada vez que guardes un día o una
+        semana, se va a enviar también al Google Sheet. Podés sincronizar manualmente para traer los datos más
+        recientes, por ejemplo si cargaste algo desde otro dispositivo.
+      </p>
+      <div class="field">
+        <label>URL del Web App</label>
+        <input type="url" id="c-sheets-url" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
+      </div>
+      <div class="footer-actions">
+        <button class="btn small" onclick="saveSheetsUrl()">Guardar URL</button>
+        <button class="btn secondary small" onclick="syncPullAll()">Sincronizar ahora</button>
+      </div>
+      <div class="sync-status" id="sync-status">Sin sincronizar todavía.</div>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Datos locales</span></h2>
+      <p class="config-note">
+        Todo se guarda también en este navegador (localStorage) como respaldo, incluso si usás Google Sheets.
+      </p>
+      <div class="footer-actions">
+        <button class="btn secondary small" onclick="exportData()">Exportar backup (.json)</button>
+        <button class="btn secondary small" onclick="document.getElementById('import-file').click()">Importar backup</button>
+        <button class="btn secondary small" style="color:var(--red); border-color:#5c2f2b;" onclick="resetData()">Borrar todo</button>
+      </div>
+      <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* ================= DATA LAYER ================= */
+const STORAGE_KEY = 'balance_tracker_v2';
+const KCAL_PER_KG = 7700;
+
+function loadData(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(raw){
+    try{ return JSON.parse(raw); }catch(e){}
+  }
+  return {
+    config:{ calTarget:2200, proteinTarget:160, deficitTarget:500, sheetsUrl:'' },
+    daily:{},
+    weekly:{}
+  };
+}
+let DATA = loadData();
+function persist(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }
+
+/* ================= HELPERS ================= */
+function isoDate(d){ return d.toISOString().slice(0,10); }
+function todayIso(){ return isoDate(new Date()); }
+function mondayOf(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1 - day);
+  d.setDate(d.getDate() + diff);
+  return isoDate(d);
+}
+function addDays(dateStr, n){
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return isoDate(d);
+}
+function fmt(n, dec=0){
+  if(n === null || n === undefined || isNaN(n)) return '—';
+  return Number(n).toLocaleString('es-AR', {minimumFractionDigits:dec, maximumFractionDigits:dec});
+}
+function sign(n){ return n > 0 ? '+' : ''; }
+function lerp(a,b,t){ t=Math.max(0,Math.min(1,t)); return a+(b-a)*t; }
+
+function deficitColor(value, target){
+  if(value === null || value === undefined || isNaN(value)) return 'var(--muted-2)';
+  const t = target || 500;
+  const ratio = value / t;
+  let hue;
+  if(ratio <= 0){
+    hue = lerp(15, 0, Math.min(1, -ratio));
+  } else if(ratio < 0.5){
+    hue = lerp(25, 45, ratio/0.5);
+  } else if(ratio <= 1.5){
+    const closeness = 1 - Math.abs(ratio-1)/0.5;
+    hue = lerp(45, 140, closeness);
+  } else if(ratio <= 2.5){
+    hue = lerp(140, 25, (ratio-1.5)/1);
+  } else {
+    hue = 5;
+  }
+  return `hsl(${hue}, 68%, 56%)`;
+}
+
+/* ================= TABS ================= */
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('section.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-'+btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab === 'dashboard') renderDashboard();
+    if(btn.dataset.tab === 'historial') renderHistorialTable();
+  });
+});
+
+/* ================= DAILY FORM ================= */
+let trainState = false;
+function setTrain(val){
+  trainState = val;
+  document.getElementById('d-train-yes').classList.toggle('on', val===true);
+  document.getElementById('d-train-no').classList.toggle('on', val===false);
+}
+
+function liveDailyUpdate(){
+  const calIn = parseFloat(document.getElementById('d-cal-in').value);
+  const calWatch = parseFloat(document.getElementById('d-cal-watch').value);
+  const protein = parseFloat(document.getElementById('d-protein').value);
+  const el = document.getElementById('d-live-deficit');
+  if(!isNaN(calIn) && !isNaN(calWatch)){
+    const def = calWatch - calIn;
+    el.textContent = (def>=0? '−':'+') + fmt(Math.abs(def)) + ' kcal';
+    el.style.color = deficitColor(def, DATA.config.deficitTarget);
+  } else {
+    el.textContent = '—'; el.style.color = 'inherit';
+  }
+  const pEl = document.getElementById('d-live-protein');
+  if(!isNaN(protein)){
+    const target = DATA.config.proteinTarget || 160;
+    pEl.textContent = fmt(protein) + 'g / ' + fmt(target) + 'g';
+    pEl.className = 'num ' + (protein >= target*0.9 ? 'pos' : 'neg');
+  } else {
+    pEl.textContent = '—'; pEl.className='num';
+  }
+}
+['d-cal-in','d-cal-watch','d-protein'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', liveDailyUpdate);
+});
+
+function loadDayIntoForm(date){
+  const e = DATA.daily[date];
+  if(!e) return;
+  document.getElementById('d-fecha').value = date;
+  document.getElementById('d-cal-in').value = e.calIn ?? '';
+  document.getElementById('d-cal-watch').value = e.calWatch ?? '';
+  document.getElementById('d-protein').value = e.protein ?? '';
+  document.getElementById('d-note').value = e.note || '';
+  setTrain(!!e.trained);
+  document.getElementById('d-edit-flag').style.display = 'inline';
+  liveDailyUpdate();
+  document.querySelector('nav.tabs button[data-tab="hoy"]').click();
+}
+
+function saveDaily(){
+  const date = document.getElementById('d-fecha').value || todayIso();
+  const existing = DATA.daily[date];
+  const hasExistingData = existing && (existing.calIn != null || existing.calWatch != null || existing.protein != null);
+  if(hasExistingData){
+    const ok = confirm(`Ya hay datos guardados para el ${date}. ¿Confirmás que querés sobrescribirlos?`);
+    if(!ok) return;
+  }
+  const calIn = parseFloat(document.getElementById('d-cal-in').value);
+  const calWatch = parseFloat(document.getElementById('d-cal-watch').value);
+  const protein = parseFloat(document.getElementById('d-protein').value);
+  const note = document.getElementById('d-note').value.trim();
+  const payload = {
+    date,
+    calIn: isNaN(calIn)? null: calIn,
+    calWatch: isNaN(calWatch)? null: calWatch,
+    protein: isNaN(protein)? null: protein,
+    trained: trainState,
+    note: note,
+    updatedAt: new Date().toISOString()
+  };
+  DATA.daily[date] = payload;
+  persist();
+  renderDailyTable();
+  document.getElementById('d-note').value='';
+  document.getElementById('d-edit-flag').style.display = 'none';
+  alertToast('Día guardado ('+date+')');
+  syncPush('saveDaily', payload);
+}
+
+function renderDailyTable(){
+  const wrap = document.getElementById('daily-table-wrap');
+  const entries = Object.entries(DATA.daily).sort((a,b)=> b[0].localeCompare(a[0])).slice(0,7);
+  if(entries.length === 0){ wrap.innerHTML = '<p class="empty">Todavía no hay registros.</p>'; return; }
+  wrap.innerHTML = buildDailyTableHtml(entries);
+}
+
+function buildDailyTableHtml(entries){
+  let html = '<table><tr><th>Fecha</th><th>Ingeridas</th><th>Watch</th><th>Déficit</th><th>Prot.</th><th>Entrenó</th></tr>';
+  entries.forEach(([date, e])=>{
+    const def = (e.calWatch!=null && e.calIn!=null) ? e.calWatch - e.calIn : null;
+    const color = deficitColor(def, DATA.config.deficitTarget);
+    html += `<tr onclick="loadDayIntoForm('${date}')">
+      <td>${date}</td>
+      <td>${e.calIn ?? '—'}</td>
+      <td>${e.calWatch ?? '—'}</td>
+      <td style="color:${color}; font-weight:600;">${def==null?'—':(def>=0?'−':'+')+fmt(Math.abs(def))}</td>
+      <td>${e.protein ?? '—'}</td>
+      <td>${e.trained ? 'Sí' : 'No'}</td>
+    </tr>`;
+  });
+  html += '</table>';
+  return html;
+}
+
+function renderHistorialTable(){
+  const wrap = document.getElementById('historial-table-wrap');
+  const entries = Object.entries(DATA.daily).sort((a,b)=> b[0].localeCompare(a[0]));
+  if(entries.length === 0){ wrap.innerHTML = '<p class="empty">Todavía no hay registros.</p>'; return; }
+  wrap.innerHTML = `<div class="table-scroll">${buildDailyTableHtml(entries)}</div>
+    <p class="config-note">${entries.length} día(s) registrado(s) en total.</p>`;
+}
+
+/* ================= WEEKLY FORM ================= */
+function saveWeekly(){
+  let date = document.getElementById('w-fecha').value;
+  if(!date){ alertToast('Elegí una fecha'); return; }
+  date = mondayOf(date);
+  const existing = DATA.weekly[date];
+  const hasExistingData = existing && (existing.weight != null || existing.waist != null);
+  if(hasExistingData){
+    const ok = confirm(`Ya hay datos guardados para la semana del ${date}. ¿Confirmás que querés sobrescribirlos?`);
+    if(!ok) return;
+  }
+  const weight = parseFloat(document.getElementById('w-peso').value);
+  const waist = parseFloat(document.getElementById('w-cintura').value);
+  const payload = {
+    date,
+    weight: isNaN(weight)? null: weight,
+    waist: isNaN(waist)? null: waist,
+    updatedAt: new Date().toISOString()
+  };
+  DATA.weekly[date] = payload;
+  persist();
+  renderWeeklyTable();
+  alertToast('Semana guardada ('+date+')');
+  syncPush('saveWeekly', payload);
+}
+
+function renderWeeklyTable(){
+  const wrap = document.getElementById('weekly-table-wrap');
+  const entries = Object.entries(DATA.weekly).sort((a,b)=> b[0].localeCompare(a[0]));
+  if(entries.length === 0){ wrap.innerHTML = '<p class="empty">Todavía no hay registros.</p>'; return; }
+  let html = '<table><tr><th>Semana (lunes)</th><th>Peso (kg)</th><th>Cintura (cm)</th></tr>';
+  entries.forEach(([date, e])=>{
+    html += `<tr><td>${date}</td><td>${e.weight ?? '—'}</td><td>${e.waist ?? '—'}</td></tr>`;
+  });
+  html += '</table>';
+  wrap.innerHTML = html;
+}
+
+/* ================= CONFIG ================= */
+function loadConfigForm(){
+  document.getElementById('c-cal-target').value = DATA.config.calTarget;
+  document.getElementById('c-protein-target').value = DATA.config.proteinTarget;
+  document.getElementById('c-deficit-target').value = DATA.config.deficitTarget;
+  document.getElementById('c-sheets-url').value = DATA.config.sheetsUrl || '';
+  updateSyncStatus();
+}
+function saveConfig(){
+  DATA.config.calTarget = parseFloat(document.getElementById('c-cal-target').value) || 2200;
+  DATA.config.proteinTarget = parseFloat(document.getElementById('c-protein-target').value) || 160;
+  DATA.config.deficitTarget = parseFloat(document.getElementById('c-deficit-target').value) || 500;
+  persist();
+  alertToast('Objetivos guardados');
+}
+function saveSheetsUrl(){
+  DATA.config.sheetsUrl = document.getElementById('c-sheets-url').value.trim();
+  persist();
+  alertToast('URL guardada');
+  updateSyncStatus();
+}
+function updateSyncStatus(){
+  const el = document.getElementById('sync-status');
+  if(DATA.config.sheetsUrl){
+    el.textContent = 'Sheets conectado: ' + DATA.config.sheetsUrl.slice(0,50) + '…';
+    el.classList.add('ok');
+  } else {
+    el.textContent = 'Sin conectar. Sin URL, los datos quedan solo en este navegador.';
+    el.classList.remove('ok');
+  }
+}
+
+function exportData(){
+  const blob = new Blob([JSON.stringify(DATA, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'balance-backup-' + todayIso() + '.json';
+  a.click();
+}
+function importData(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const parsed = JSON.parse(e.target.result);
+      if(parsed.daily && parsed.weekly && parsed.config){
+        DATA = parsed;
+        persist();
+        loadConfigForm();
+        renderDailyTable();
+        renderWeeklyTable();
+        renderHistorialTable();
+        renderDashboard();
+        alertToast('Backup importado correctamente');
+      } else {
+        alertToast('Archivo inválido');
+      }
+    }catch(err){ alertToast('Error al leer el archivo'); }
+  };
+  reader.readAsText(file);
+}
+function resetData(){
+  if(confirm('¿Borrar todos los datos guardados en este navegador? Esta acción no se puede deshacer.')){
+    localStorage.removeItem(STORAGE_KEY);
+    DATA = loadData();
+    loadConfigForm();
+    renderDailyTable();
+    renderWeeklyTable();
+    renderHistorialTable();
+    renderDashboard();
+    alertToast('Datos borrados');
+  }
+}
+
+/* ================= SYNC CON GOOGLE SHEETS ================= */
+async function syncPush(action, payload){
+  const url = DATA.config.sheetsUrl;
+  if(!url) return;
+  try{
+    await fetch(url, {
+      method:'POST',
+      headers: {'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action, payload})
+    });
+  }catch(err){ console.warn('Error de sincronización', err); }
+}
+
+async function syncPullAll(){
+  const url = DATA.config.sheetsUrl;
+  if(!url){ alertToast('Configurá la URL de Apps Script primero'); return; }
+  try{
+    const res = await fetch(url + (url.includes('?') ? '&' : '?') + 'action=getAll');
+    const json = await res.json();
+    DATA.daily = json.daily || {};
+    DATA.weekly = json.weekly || {};
+    persist();
+    renderDailyTable(); renderWeeklyTable(); renderHistorialTable(); renderDashboard();
+    alertToast('Sincronizado con Google Sheets');
+  }catch(err){ alertToast('Error al sincronizar'); console.error(err); }
+}
+
+/* ================= ANALYSIS ================= */
+function weeklyDeficitAccumulated(weekMonday){
+  const days = [...Array(7)].map((_,i)=> addDays(weekMonday, i));
+  let sum = 0, count = 0, loggedDays = 0;
+  days.forEach(d=>{
+    const e = DATA.daily[d];
+    if(e){
+      if(e.calIn != null) loggedDays++;
+      if(e.calIn != null && e.calWatch != null){ sum += (e.calWatch - e.calIn); count++; }
+    }
+  });
+  return { accumulated: count>0 ? sum : null, daysWithData: count, adherence: Math.round((loggedDays/7)*100) };
+}
+
+function weeklyProteinAvg(weekMonday){
+  const days = [...Array(7)].map((_,i)=> addDays(weekMonday, i));
+  let sum=0, n=0;
+  days.forEach(d=>{
+    const e = DATA.daily[d];
+    if(e && e.protein != null){ sum += e.protein; n++; }
+  });
+  return n>0 ? sum/n : null;
+}
+
+function buildWeeklySeries(){
+  const weeks = Object.keys(DATA.weekly).sort();
+  const series = [];
+  weeks.forEach((wk, idx)=>{
+    const w = DATA.weekly[wk];
+    const def = weeklyDeficitAccumulated(wk);
+    const proteinAvg = weeklyProteinAvg(wk);
+    let expectedLossKg = def.accumulated != null ? def.accumulated / KCAL_PER_KG : null;
+    let realLossKg = null, diffKg = null;
+    if(idx > 0){
+      const prevW = DATA.weekly[weeks[idx-1]].weight;
+      if(prevW != null && w.weight != null){
+        realLossKg = prevW - w.weight;
+        if(expectedLossKg != null) diffKg = realLossKg - expectedLossKg;
+      }
+    }
+    series.push({
+      weekStart: wk, weight: w.weight, waist: w.waist,
+      accumulated: def.accumulated, adherence: def.adherence, proteinAvg,
+      expectedLossKg, realLossKg, diffKg
+    });
+  });
+  return series;
+}
+
+function buildMonthlySeries(series){
+  const months = {};
+  series.forEach(s=>{
+    const m = s.weekStart.slice(0,7);
+    if(!months[m]) months[m] = [];
+    months[m].push(s);
+  });
+  const dailyByMonth = {};
+  Object.entries(DATA.daily).forEach(([date,e])=>{
+    const m = date.slice(0,7);
+    if(!dailyByMonth[m]) dailyByMonth[m] = [];
+    dailyByMonth[m].push(e);
+  });
+  const result = [];
+  Object.keys(months).sort().forEach(m=>{
+    const weeks = months[m];
+    const weights = weeks.map(w=>w.weight).filter(w=>w!=null);
+    const waists = weeks.map(w=>w.waist).filter(w=>w!=null);
+    const weightStart = weights.length? weights[0] : null;
+    const weightEnd = weights.length? weights[weights.length-1] : null;
+    const waistStart = waists.length? waists[0] : null;
+    const waistEnd = waists.length? waists[waists.length-1] : null;
+    const accSum = weeks.reduce((a,w)=> a + (w.accumulated||0), 0);
+    const adherenceAvg = weeks.reduce((a,w)=>a+(w.adherence||0),0)/weeks.length;
+    const dEntries = dailyByMonth[m] || [];
+    const calInVals = dEntries.map(e=>e.calIn).filter(v=>v!=null);
+    const protVals = dEntries.map(e=>e.protein).filter(v=>v!=null);
+    const calInAvg = calInVals.length? calInVals.reduce((a,b)=>a+b,0)/calInVals.length : null;
+    const protAvg = protVals.length? protVals.reduce((a,b)=>a+b,0)/protVals.length : null;
+    result.push({
+      month:m,
+      weightStart, weightEnd, weightChange:(weightStart!=null&&weightEnd!=null)? weightEnd-weightStart:null,
+      waistStart, waistEnd, waistChange:(waistStart!=null&&waistEnd!=null)?waistEnd-waistStart:null,
+      accSum, adherenceAvg, calInAvg, protAvg
+    });
+  });
+  return result;
+}
+
+/* ================= DASHBOARD RENDER ================= */
+let chartWeight, chartDeficit, chartWaist;
+
+function renderDashboard(){
+  const series = buildWeeklySeries();
+  renderKPIs(series);
+  renderBeam(series);
+  renderCharts(series);
+  renderDashWeekly(series);
+  renderDashMonthly(series);
+  renderAlerts(series);
+  renderRecommendation(series);
+}
+
+function renderKPIs(series){
+  const row = document.getElementById('kpi-row');
+  if(series.length === 0){
+    row.innerHTML = '<div class="kpi"><div class="lbl">Sin datos</div><div class="val" style="font-size:14px; color:var(--muted-2)">Cargá tu primera semana</div></div>';
+    return;
+  }
+  const last = series[series.length-1];
+  const first = series.length>=4 ? series[Math.max(0,series.length-4)] : series[0];
+  const change4w = (last.weight!=null && first.weight!=null) ? last.weight - first.weight : null;
+
+  const dailyEntries = Object.entries(DATA.daily).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,7);
+  let defSum=0, defN=0, protSum=0, protN=0;
+  dailyEntries.forEach(([,e])=>{
+    if(e.calIn!=null && e.calWatch!=null){ defSum += (e.calWatch-e.calIn); defN++; }
+    if(e.protein!=null){ protSum+=e.protein; protN++; }
+  });
+  const avgDef = defN>0 ? defSum/defN : null;
+  const avgProt = protN>0 ? protSum/protN : null;
+
+  row.innerHTML = `
+    <div class="kpi">
+      <div class="lbl">Peso actual</div>
+      <div class="val">${last.weight!=null ? fmt(last.weight,1)+' kg' : '—'}</div>
+      <div class="sub">semana del ${last.weekStart}</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">Cambio últimas 4 semanas</div>
+      <div class="val" style="color:${change4w==null?'inherit':(change4w<=0?'var(--teal)':'var(--red)')}">${change4w==null?'—':(sign(change4w)+fmt(change4w,1)+' kg')}</div>
+      <div class="sub">vs. semana del ${first.weekStart}</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">Déficit prom. (últ. 7 días)</div>
+      <div class="val" style="color:${deficitColor(avgDef, DATA.config.deficitTarget)}">${avgDef==null?'—':(avgDef>=0?'−':'+')+fmt(Math.abs(avgDef))+' kcal'}</div>
+      <div class="sub">objetivo: −${fmt(DATA.config.deficitTarget)} kcal</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">Proteína prom. (últ. 7 días)</div>
+      <div class="val" style="color:${avgProt==null?'inherit':(avgProt>=DATA.config.proteinTarget*0.9?'var(--teal)':'var(--red)')}">${avgProt==null?'—':fmt(avgProt)+'g'}</div>
+      <div class="sub">objetivo: ${fmt(DATA.config.proteinTarget)}g</div>
+    </div>
+  `;
+}
+
+function renderBeam(series){
+  const container = document.getElementById('beam-container');
+  const withDiff = series.filter(s=>s.diffKg != null);
+  if(withDiff.length === 0){
+    container.innerHTML = '<p class="empty">Cargá al menos dos semanas de peso para ver esta comparación.</p>';
+    return;
+  }
+  const last = withDiff[withDiff.length-1];
+  const maxAbs = Math.max(0.4, Math.abs(last.expectedLossKg||0), Math.abs(last.realLossKg||0));
+  const scale = (v)=> 50 + (v/maxAbs)*45;
+  const expPct = scale(last.expectedLossKg||0);
+  const realPct = scale(last.realLossKg||0);
+  const left = Math.min(expPct, realPct), width = Math.abs(expPct-realPct);
+
+  container.innerHTML = `
+    <div class="beam-wrap">
+      <div class="beam-labels">
+        <span>← ganancia</span>
+        <span style="color:var(--muted-2)">semana del ${last.weekStart}</span>
+        <span>pérdida →</span>
+      </div>
+      <div class="beam-track">
+        <div class="beam-fill" style="left:${left}%; width:${Math.max(width,0.5)}%;"></div>
+        <div class="beam-marker" style="left:${expPct}%; background:var(--amber);"></div>
+        <div class="beam-marker" style="left:${realPct}%; background:var(--teal);"></div>
+      </div>
+      <div class="beam-caption">
+        <span><span style="color:var(--amber)">●</span> esperado (déficit del Watch): ${fmt(last.expectedLossKg,2)} kg</span>
+        <span><span style="color:var(--teal)">●</span> real (balanza): ${fmt(last.realLossKg,2)} kg</span>
+      </div>
+      <p style="margin-top:12px; font-size:12px; color:var(--muted); line-height:1.5;">
+        Diferencia: <strong class="mono" style="color:${Math.abs(last.diffKg)<0.2?'var(--teal)':'var(--amber)'}">${sign(last.diffKg)}${fmt(last.diffKg,2)} kg</strong>
+        ${Math.abs(last.diffKg) < 0.2 ? '— el déficit del Watch coincide bien con la balanza esta semana.' : '— hay una brecha entre lo que predice el déficit y lo que muestra la balanza.'}
+      </p>
+    </div>
+  `;
+}
+
+function renderCharts(series){
+  const labels = series.map(s=>s.weekStart);
+  if(chartWeight) chartWeight.destroy();
+  if(chartDeficit) chartDeficit.destroy();
+  if(chartWaist) chartWaist.destroy();
+
+  const chartOpts = {
+    responsive:true,
+    plugins:{ legend:{ labels:{ color:'#8b94a3', font:{family:'Inter'} } } },
+    scales:{
+      x:{ ticks:{ color:'#5f6773', font:{size:10} }, grid:{ color:'rgba(255,255,255,0.04)' } },
+      y:{ ticks:{ color:'#5f6773', font:{size:10} }, grid:{ color:'rgba(255,255,255,0.06)' } }
+    }
+  };
+
+  chartWeight = new Chart(document.getElementById('chart-weight'), {
+    type:'line',
+    data:{ labels, datasets:[{ label:'Peso (kg)', data:series.map(s=>s.weight), borderColor:'#4dd0c0', backgroundColor:'rgba(77,208,192,0.1)', tension:0.3, fill:true, spanGaps:true }]},
+    options: chartOpts
+  });
+
+  const weeklyTarget = (DATA.config.deficitTarget || 500) * 7;
+  chartDeficit = new Chart(document.getElementById('chart-deficit'), {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'Déficit acumulado (kcal)', data:series.map(s=>s.accumulated), backgroundColor:series.map(s=> deficitColor(s.accumulated, weeklyTarget)) }]},
+    options: chartOpts
+  });
+
+  chartWaist = new Chart(document.getElementById('chart-waist'), {
+    type:'line',
+    data:{ labels, datasets:[{ label:'Cintura (cm)', data:series.map(s=>s.waist), borderColor:'#f2a93c', backgroundColor:'rgba(242,169,60,0.1)', tension:0.3, fill:true, spanGaps:true }]},
+    options: chartOpts
+  });
+}
+
+function renderDashWeekly(series){
+  const wrap = document.getElementById('dash-weekly-wrap');
+  if(series.length === 0){ wrap.innerHTML = '<p class="empty">Sin datos todavía.</p>'; return; }
+  const weeklyTarget = (DATA.config.deficitTarget || 500) * 7;
+  let html = '<div class="table-scroll"><table><tr><th>Semana</th><th>Peso</th><th>Cintura</th><th>Déficit acum.</th><th>Adherencia</th><th>Esperado</th><th>Real</th><th>Diff.</th></tr>';
+  [...series].reverse().forEach(s=>{
+    const color = deficitColor(s.accumulated, weeklyTarget);
+    html += `<tr>
+      <td>${s.weekStart}</td>
+      <td>${s.weight!=null? fmt(s.weight,1)+'kg':'—'}</td>
+      <td>${s.waist!=null? fmt(s.waist,1)+'cm':'—'}</td>
+      <td style="color:${color}; font-weight:600;">${s.accumulated==null?'—':fmt(s.accumulated)}</td>
+      <td>${s.adherence}%</td>
+      <td>${s.expectedLossKg==null?'—':fmt(s.expectedLossKg,2)+'kg'}</td>
+      <td>${s.realLossKg==null?'—':fmt(s.realLossKg,2)+'kg'}</td>
+      <td>${s.diffKg==null?'—':sign(s.diffKg)+fmt(s.diffKg,2)+'kg'}</td>
+    </tr>`;
+  });
+  html += '</table></div>';
+  wrap.innerHTML = html;
+}
+
+function renderDashMonthly(series){
+  const wrap = document.getElementById('dash-monthly-wrap');
+  const monthly = buildMonthlySeries(series);
+  if(monthly.length === 0){ wrap.innerHTML = '<p class="empty">Sin datos todavía.</p>'; return; }
+  const monthlyTarget = (DATA.config.deficitTarget || 500) * 30;
+  let html = '<div class="table-scroll"><table><tr><th>Mes</th><th>Peso inicio→fin</th><th>Cambio</th><th>Cintura inicio→fin</th><th>Cambio</th><th>Cal. prom.</th><th>Prot. prom.</th><th>Déficit acum.</th><th>Adherencia</th></tr>';
+  [...monthly].reverse().forEach(m=>{
+    const color = deficitColor(m.accSum, monthlyTarget);
+    html += `<tr>
+      <td>${m.month}</td>
+      <td>${m.weightStart!=null? fmt(m.weightStart,1):'—'} → ${m.weightEnd!=null? fmt(m.weightEnd,1):'—'}</td>
+      <td style="color:${m.weightChange==null?'inherit':(m.weightChange<=0?'var(--teal)':'var(--red)')}">${m.weightChange==null?'—':sign(m.weightChange)+fmt(m.weightChange,1)+'kg'}</td>
+      <td>${m.waistStart!=null? fmt(m.waistStart,1):'—'} → ${m.waistEnd!=null? fmt(m.waistEnd,1):'—'}</td>
+      <td style="color:${m.waistChange==null?'inherit':(m.waistChange<=0?'var(--teal)':'var(--red)')}">${m.waistChange==null?'—':sign(m.waistChange)+fmt(m.waistChange,1)+'cm'}</td>
+      <td>${m.calInAvg==null?'—':fmt(m.calInAvg)}</td>
+      <td>${m.protAvg==null?'—':fmt(m.protAvg)+'g'}</td>
+      <td style="color:${color}; font-weight:600;">${fmt(m.accSum)}</td>
+      <td>${fmt(m.adherenceAvg)}%</td>
+    </tr>`;
+  });
+  html += '</table></div>';
+  wrap.innerHTML = html;
+}
+
+function renderAlerts(series){
+  const wrap = document.getElementById('alerts-wrap');
+  const alerts = [];
+
+  if(series.length >= 3){
+    const last3 = series.slice(-3);
+    const adherenceOk = last3.every(s => s.adherence >= 80);
+
+    const weights = last3.map(s=>s.weight).filter(w=>w!=null);
+    if(weights.length===3){
+      const range = Math.max(...weights) - Math.min(...weights);
+      if(range <= 0.3 && adherenceOk){
+        alerts.push({type:'warn', text:'El peso no se movió (±0.3kg) en las últimas 3 semanas con buena adherencia. Puede ser momento de recalibrar el objetivo de calorías.'});
+      }
+    }
+
+    const diffs = last3.map(s=>s.diffKg).filter(d=>d!=null);
+    if(diffs.length===3){
+      const allNegative = diffs.every(d=> d < -0.15);
+      const allPositive = diffs.every(d=> d > 0.15);
+      if(allNegative){
+        alerts.push({type:'bad', text:'Hace 3 semanas que perdés menos peso real del que predice el déficit del Watch. Probablemente el Watch está sobreestimando tu gasto — considerá reducir el objetivo de calorías o el déficit.'});
+      } else if(allPositive){
+        alerts.push({type:'bad', text:'Hace 3 semanas que perdés más peso real del que predice el déficit del Watch. Revisá que no sea agua o pérdida de músculo — considerá subir levemente las calorías.'});
+      }
+    }
+  }
+
+  const last = series[series.length-1];
+  if(last && last.realLossKg != null && last.weight != null){
+    const pct = (last.realLossKg / (last.weight + last.realLossKg)) * 100;
+    if(pct > 1){
+      alerts.push({type:'bad', text:`La pérdida de la última semana fue de ${fmt(pct,1)}% del peso corporal — más rápido de lo recomendable para preservar masa muscular.`});
+    }
+  }
+
+  if(last && last.adherence < 70){
+    alerts.push({type:'warn', text:`La adherencia de la última semana fue de ${last.adherence}%. Los datos de esa semana no son confiables para tomar decisiones.`});
+  }
+
+  if(series.length >= 2){
+    const last2 = series.slice(-2);
+    const target = DATA.config.proteinTarget;
+    const proteinLow = last2.every(s => s.proteinAvg != null && s.proteinAvg < target*0.9);
+    if(proteinLow){
+      alerts.push({type:'warn', text:`La proteína viene por debajo del objetivo (${fmt(target)}g) durante 2 semanas seguidas.`});
+    }
+  }
+
+  if(alerts.length === 0){
+    wrap.innerHTML = '<div class="alert ok"><span class="dot"></span><span>Sin alertas activas. Los datos están dentro de rangos esperados.</span></div>';
+    return;
+  }
+  wrap.innerHTML = alerts.map(a=> `<div class="alert ${a.type}"><span class="dot"></span><span>${a.text}</span></div>`).join('');
+}
+
+function renderRecommendation(series){
+  const box = document.getElementById('rec-box');
+  let text = '';
+
+  if(series.length < 3){
+    text = `Todavía hay ${series.length} semana(s) registrada(s). Se necesitan al menos 3 semanas completas para generar una recomendación confiable. Seguí registrando.`;
+  } else {
+    const last3 = series.slice(-3);
+    const adherenceOk = last3.every(s => s.adherence >= 80);
+    if(!adherenceOk){
+      text = 'La adherencia de registro no fue suficiente en alguna de las últimas 3 semanas. No se genera una recomendación de ajuste hasta tener datos más completos.';
+    } else {
+      const weights = last3.map(s=>s.weight).filter(w=>w!=null);
+      const diffs = last3.map(s=>s.diffKg).filter(d=>d!=null);
+      const stagnant = weights.length===3 && (Math.max(...weights) - Math.min(...weights) <= 0.3);
+      const diffNegSustained = diffs.length===3 && diffs.every(d=> d < -0.15);
+      const diffPosSustained = diffs.length===3 && diffs.every(d=> d > 0.15);
+
+      if(stagnant){
+        text = 'El peso no muestra tendencia clara en las últimas 3 semanas pese a buena adherencia. Considerá reducir el objetivo de calorías entre 100 y 150 kcal/día, o revisar la precisión del registro de ingesta.';
+      } else if(diffNegSustained){
+        text = 'La pérdida real viene siendo menor a la que predice el déficit del Watch, de forma sostenida. El Watch probablemente sobreestima tu gasto — ajustá el objetivo de calorías hacia abajo o reducí el déficit objetivo.';
+      } else if(diffPosSustained){
+        text = 'La pérdida real viene siendo mayor a la que predice el déficit del Watch, de forma sostenida. Subí levemente las calorías para no acelerar más de lo necesario la pérdida de peso.';
+      } else {
+        text = 'Continuar igual. El déficit del Watch y la evolución real del peso coinciden razonablemente en las últimas semanas.';
+      }
+    }
+  }
+  box.innerHTML = '<span class="eyebrow">Sistema</span>' + text;
+}
+
+/* ================= TOAST ================= */
+function alertToast(msg){
+  let t = document.getElementById('toast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = 'toast';
+    t.style.cssText = 'position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--panel-2); border:1px solid var(--teal); color:var(--text); padding:10px 18px; border-radius:8px; font-size:13px; z-index:999; opacity:0; transition:opacity .2s;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(()=>{ t.style.opacity = '0'; }, 2200);
+}
+
+/* ================= INIT ================= */
+function init(){
+  document.getElementById('d-fecha').value = todayIso();
+  document.getElementById('w-fecha').value = mondayOf(todayIso());
+  setTrain(false);
+  loadConfigForm();
+  renderDailyTable();
+  renderWeeklyTable();
+  renderHistorialTable();
+  liveDailyUpdate();
+  renderDashboard();
+  if(DATA.config.sheetsUrl){ syncPullAll(); }
+}
+init();
+</script>
+</body>
+</html>
