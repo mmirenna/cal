@@ -511,6 +511,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
     document.getElementById('view-'+btn.dataset.tab).classList.add('active');
     if(btn.dataset.tab === 'dashboard') renderDashboard();
     if(btn.dataset.tab === 'historial') renderHistorialTable();
+    if(btn.dataset.tab === 'config') loadConfigForm();
   });
 });
 
@@ -760,6 +761,7 @@ async function syncPullAll(){
     DATA.weekly = json.weekly || {};
     persist();
     renderDailyTable(); renderWeeklyTable(); renderHistorialTable(); renderDashboard();
+    updateSyncStatus();
     alertToast('Sincronizado con Google Sheets');
   }catch(err){ alertToast('Error al sincronizar'); console.error(err); }
 }
@@ -782,6 +784,7 @@ async function syncPushAll(){
     try{ await syncPushAwait('saveWeekly', e); } catch(err){ failed++; }
   }
   alertToast(failed === 0 ? 'Listo, se subieron todos los registros' : `Subido con ${failed} error(es) — revisá la consola`);
+  updateSyncStatus();
 }
 
 // Igual que syncPush, pero propaga el error para que syncPushAll pueda contar fallos
