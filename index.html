@@ -161,7 +161,8 @@
 
   table{width:100%; border-collapse:collapse; font-size:13px;}
   th{text-align:left; color:var(--muted-2); font-weight:600; font-size:10px; text-transform:uppercase;
-     letter-spacing:.05em; padding:6px 8px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--panel);}
+     letter-spacing:.05em; padding:6px 8px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--panel); white-space:nowrap;}
+  th:hover{ color:var(--text); }
   td{padding:8px; border-bottom:1px solid rgba(255,255,255,0.04); font-family:'JetBrains Mono',monospace;}
   tr:hover td{background:rgba(255,255,255,0.02); cursor:pointer;}
   .table-scroll{max-height:520px; overflow-y:auto; overflow-x:auto; border-radius:8px; -webkit-overflow-scrolling:touch;}
@@ -502,7 +503,58 @@ function deficitColor(value, target){
   return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
-/* ================= TABS ================= */
+/* ================= ORDENAMIENTO DE TABLAS ================= */
+const sortState = {
+  daily7:      { key:'date',      dir:'desc' },
+  historial:   { key:'date',      dir:'desc' },
+  weekly:      { key:'date',      dir:'desc' },
+  dashWeekly:  { key:'weekStart', dir:'desc' },
+  dashMonthly: { key:'month',     dir:'desc' }
+};
+
+function sortArray(arr, key, dir){
+  const mul = dir === 'asc' ? 1 : -1;
+  return [...arr].sort((a,b)=>{
+    let av = a[key], bv = b[key];
+    if(typeof av === 'boolean') av = av ? 1 : 0;
+    if(typeof bv === 'boolean') bv = bv ? 1 : 0;
+    const aNull = (av===null || av===undefined);
+    const bNull = (bv===null || bv===undefined);
+    if(aNull && bNull) return 0;
+    if(aNull) return 1;   // los vacíos siempre quedan al final
+    if(bNull) return -1;
+    if(typeof av === 'string') return mul * av.localeCompare(bv);
+    return mul * (av - bv);
+  });
+}
+
+function thSort(tableId, key, label){
+  const state = sortState[tableId];
+  const active = state.key === key;
+  const arrow = active ? (state.dir === 'asc' ? ' ▲' : ' ▼') : '';
+  return `<th onclick="toggleSort('${tableId}','${key}')" style="cursor:pointer;${active ? ' color:var(--teal);' : ''}">${label}${arrow}</th>`;
+}
+
+const sortRerender = {
+  daily7:      renderDailyTable,
+  historial:   renderHistorialTable,
+  weekly:      renderWeeklyTable,
+  dashWeekly:  ()=> renderDashWeekly(buildWeeklySeries()),
+  dashMonthly: ()=> renderDashMonthly(buildWeeklySeries())
+};
+
+function toggleSort(tableId, key){
+  const state = sortState[tableId];
+  if(state.key === key){
+    state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.key = key;
+    state.dir = 'asc';
+  }
+  sortRerender[tableId]();
+}
+
+
 document.querySelectorAll('nav.tabs button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
@@ -592,23 +644,42 @@ function saveDaily(){
   syncPush('saveDaily', payload);
 }
 
-function renderDailyTable(){
-  const wrap = document.getElementById('daily-table-wrap');
-  const entries = Object.entries(DATA.daily).sort((a,b)=> b[0].localeCompare(a[0])).slice(0,7);
-  if(entries.length === 0){ wrap.innerHTML = '<p class="empty">Todavía no hay registros.</p>'; return; }
-  wrap.innerHTML = buildDailyTableHtml(entries);
+function getDailyEntriesArray(){
+  return Object.entries(DATA.daily).map(([date, e])=>({
+    date,
+    calIn: e.calIn,
+    calWatch: e.calWatch,
+    deficit: (e.calWatch != null && e.calIn != null) ? e.calWatch - e.calIn : null,
+    protein: e.protein,
+    trained: e.trained
+  }));
 }
 
-function buildDailyTableHtml(entries){
-  let html = '<table><tr><th>Fecha</th><th>Ingeridas</th><th>Watch</th><th>Déficit</th><th>Prot.</th><th>Entrenó</th></tr>';
-  entries.forEach(([date, e])=>{
-    const def = (e.calWatch!=null && e.calIn!=null) ? e.calWatch - e.calIn : null;
-    const color = deficitColor(def, DATA.config.deficitTarget);
-    html += `<tr onclick="loadDayIntoForm('${date}')">
-      <td>${date}</td>
+function renderDailyTable(){
+  const wrap = document.getElementById('daily-table-wrap');
+  const all = getDailyEntriesArray().sort((a,b)=> b.date.localeCompare(a.date)); // ventana: últimos 7 días reales
+  const last7 = all.slice(0,7);
+  if(last7.length === 0){ wrap.innerHTML = '<p class="empty">Todavía no hay registros.</p>'; return; }
+  const sorted = sortArray(last7, sortState.daily7.key, sortState.daily7.dir);
+  wrap.innerHTML = buildDailyTableHtml(sorted, 'daily7');
+}
+
+function buildDailyTableHtml(entries, tableId){
+  let html = '<table><tr>'
+    + thSort(tableId, 'date', 'Fecha')
+    + thSort(tableId, 'calIn', 'Ingeridas')
+    + thSort(tableId, 'calWatch', 'Watch')
+    + thSort(tableId, 'deficit', 'Déficit')
+    + thSort(tableId, 'protein', 'Prot.')
+    + thSort(tableId, 'trained', 'Entrenó')
+    + '</tr>';
+  entries.forEach(e=>{
+    const color = deficitColor(e.deficit, DATA.config.deficitTarget);
+    html += `<tr onclick="loadDayIntoForm('${e.date}')">
+      <td>${e.date}</td>
       <td>${e.calIn ?? '—'}</td>
       <td>${e.calWatch ?? '—'}</td>
-      <td style="color:${color}; font-weight:600;">${def==null?'—':(def>=0?'−':'+')+fmt(Math.abs(def))}</td>
+      <td style="color:${color}; font-weight:600;">${e.deficit==null?'—':(e.deficit>=0?'−':'+')+fmt(Math.abs(e.deficit))}</td>
       <td>${e.protein ?? '—'}</td>
       <td>${e.trained ? 'Sí' : 'No'}</td>
     </tr>`;
@@ -619,10 +690,11 @@ function buildDailyTableHtml(entries){
 
 function renderHistorialTable(){
   const wrap = document.getElementById('historial-table-wrap');
-  const entries = Object.entries(DATA.daily).sort((a,b)=> b[0].localeCompare(a[0]));
-  if(entries.length === 0){ wrap.innerHTML = '<p class="empty">Todavía no hay registros.</p>'; return; }
-  wrap.innerHTML = `<div class="table-scroll">${buildDailyTableHtml(entries)}</div>
-    <p class="config-note">${entries.length} día(s) registrado(s) en total.</p>`;
+  const all = getDailyEntriesArray();
+  if(all.length === 0){ wrap.innerHTML = '<p class="empty">Todavía no hay registros.</p>'; return; }
+  const sorted = sortArray(all, sortState.historial.key, sortState.historial.dir);
+  wrap.innerHTML = `<div class="table-scroll">${buildDailyTableHtml(sorted, 'historial')}</div>
+    <p class="config-note">${all.length} día(s) registrado(s) en total.</p>`;
 }
 
 /* ================= WEEKLY FORM ================= */
@@ -653,11 +725,16 @@ function saveWeekly(){
 
 function renderWeeklyTable(){
   const wrap = document.getElementById('weekly-table-wrap');
-  const entries = Object.entries(DATA.weekly).sort((a,b)=> b[0].localeCompare(a[0]));
+  const entries = Object.entries(DATA.weekly).map(([date,e])=>({date, weight:e.weight, waist:e.waist}));
   if(entries.length === 0){ wrap.innerHTML = '<p class="empty">Todavía no hay registros.</p>'; return; }
-  let html = '<table><tr><th>Semana (lunes)</th><th>Peso (kg)</th><th>Cintura (cm)</th></tr>';
-  entries.forEach(([date, e])=>{
-    html += `<tr><td>${date}</td><td>${e.weight ?? '—'}</td><td>${e.waist ?? '—'}</td></tr>`;
+  const sorted = sortArray(entries, sortState.weekly.key, sortState.weekly.dir);
+  let html = '<table><tr>'
+    + thSort('weekly', 'date', 'Semana (lunes)')
+    + thSort('weekly', 'weight', 'Peso (kg)')
+    + thSort('weekly', 'waist', 'Cintura (cm)')
+    + '</tr>';
+  sorted.forEach(e=>{
+    html += `<tr><td>${e.date}</td><td>${e.weight ?? '—'}</td><td>${e.waist ?? '—'}</td></tr>`;
   });
   html += '</table>';
   wrap.innerHTML = html;
@@ -1022,8 +1099,18 @@ function renderDashWeekly(series){
   const wrap = document.getElementById('dash-weekly-wrap');
   if(series.length === 0){ wrap.innerHTML = '<p class="empty">Sin datos todavía.</p>'; return; }
   const weeklyTarget = (DATA.config.deficitTarget || 500) * 7;
-  let html = '<div class="table-scroll"><table><tr><th>Semana</th><th>Peso</th><th>Cintura</th><th>Déficit acum.</th><th>Adherencia</th><th>Esperado</th><th>Real</th><th>Diff.</th></tr>';
-  [...series].reverse().forEach(s=>{
+  const sorted = sortArray(series, sortState.dashWeekly.key, sortState.dashWeekly.dir);
+  let html = '<div class="table-scroll"><table><tr>'
+    + thSort('dashWeekly', 'weekStart', 'Semana')
+    + thSort('dashWeekly', 'weight', 'Peso')
+    + thSort('dashWeekly', 'waist', 'Cintura')
+    + thSort('dashWeekly', 'accumulated', 'Déficit acum.')
+    + thSort('dashWeekly', 'adherence', 'Adherencia')
+    + thSort('dashWeekly', 'expectedLossKg', 'Esperado')
+    + thSort('dashWeekly', 'realLossKg', 'Real')
+    + thSort('dashWeekly', 'diffKg', 'Diff.')
+    + '</tr>';
+  sorted.forEach(s=>{
     const color = deficitColor(s.accumulated, weeklyTarget);
     html += `<tr>
       <td>${s.weekStart}</td>
@@ -1045,8 +1132,19 @@ function renderDashMonthly(series){
   const monthly = buildMonthlySeries(series);
   if(monthly.length === 0){ wrap.innerHTML = '<p class="empty">Sin datos todavía.</p>'; return; }
   const monthlyTarget = (DATA.config.deficitTarget || 500) * 30;
-  let html = '<div class="table-scroll"><table><tr><th>Mes</th><th>Peso inicio→fin</th><th>Cambio</th><th>Cintura inicio→fin</th><th>Cambio</th><th>Cal. prom.</th><th>Prot. prom.</th><th>Déficit acum.</th><th>Adherencia</th></tr>';
-  [...monthly].reverse().forEach(m=>{
+  const sorted = sortArray(monthly, sortState.dashMonthly.key, sortState.dashMonthly.dir);
+  let html = '<div class="table-scroll"><table><tr>'
+    + thSort('dashMonthly', 'month', 'Mes')
+    + thSort('dashMonthly', 'weightStart', 'Peso inicio')
+    + thSort('dashMonthly', 'weightChange', 'Cambio peso')
+    + thSort('dashMonthly', 'waistStart', 'Cintura inicio')
+    + thSort('dashMonthly', 'waistChange', 'Cambio cintura')
+    + thSort('dashMonthly', 'calInAvg', 'Cal. prom.')
+    + thSort('dashMonthly', 'protAvg', 'Prot. prom.')
+    + thSort('dashMonthly', 'accSum', 'Déficit acum.')
+    + thSort('dashMonthly', 'adherenceAvg', 'Adherencia')
+    + '</tr>';
+  sorted.forEach(m=>{
     const color = deficitColor(m.accSum, monthlyTarget);
     html += `<tr>
       <td>${m.month}</td>
