@@ -463,6 +463,42 @@ function loadData(){
 let DATA = loadData();
 function persist(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(DATA)); }
 
+/* Corrige fechas que hayan quedado guardadas en un formato distinto al ISO
+   (por ejemplo "Wed Sep 02 2026..." en vez de "2026-09-02"), algo que puede
+   pasar si en algún momento se sincronizó un valor de fecha mal formateado.
+   Sin esto, el orden cronológico se rompe porque se compara como texto. */
+function normalizeDateKey(raw){
+  if(typeof raw !== 'string') raw = String(raw);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw; // ya está bien
+  const d = new Date(raw);
+  if(!isNaN(d.getTime())) return isoDate(d);
+  return raw; // no se pudo interpretar, se deja como estaba
+}
+
+function sanitizeDates(){
+  let changed = false;
+  const cleanDaily = {};
+  Object.entries(DATA.daily).forEach(([k,v])=>{
+    const nk = normalizeDateKey(k);
+    if(nk !== k) changed = true;
+    v.date = nk;
+    cleanDaily[nk] = v;
+  });
+  DATA.daily = cleanDaily;
+
+  const cleanWeekly = {};
+  Object.entries(DATA.weekly).forEach(([k,v])=>{
+    const nk = mondayOf(normalizeDateKey(k));
+    if(nk !== k) changed = true;
+    v.date = nk;
+    cleanWeekly[nk] = v;
+  });
+  DATA.weekly = cleanWeekly;
+
+  if(changed) persist();
+}
+sanitizeDates();
+
 /* ================= HELPERS ================= */
 function isoDate(d){ return d.toISOString().slice(0,10); }
 function todayIso(){ return isoDate(new Date()); }
@@ -836,6 +872,7 @@ async function syncPullAll(){
     const json = await res.json();
     DATA.daily = json.daily || {};
     DATA.weekly = json.weekly || {};
+    sanitizeDates();
     persist();
     renderDailyTable(); renderWeeklyTable(); renderHistorialTable(); renderDashboard();
     updateSyncStatus();
