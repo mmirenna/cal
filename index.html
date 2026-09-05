@@ -390,8 +390,7 @@
       <h2><span class="eyebrow">Google Sheets (sincronización)</span></h2>
       <p class="config-note">
         Pegá acá la URL del Web App de Apps Script (ver instrucciones del script). Cada vez que guardes un día o una
-        semana, se va a enviar también al Google Sheet. Podés sincronizar manualmente para traer los datos más
-        recientes, por ejemplo si cargaste algo desde otro dispositivo.
+        semana <strong>a partir de ahora</strong>, se va a enviar también al Google Sheet automáticamente.
       </p>
       <div class="field">
         <label>URL del Web App</label>
@@ -399,9 +398,25 @@
       </div>
       <div class="footer-actions">
         <button class="btn small" onclick="saveSheetsUrl()">Guardar URL</button>
-        <button class="btn secondary small" onclick="syncPullAll()">Sincronizar ahora</button>
       </div>
       <div class="sync-status" id="sync-status">Sin sincronizar todavía.</div>
+
+      <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border);">
+        <p class="config-note">
+          <strong style="color:var(--amber);">Subir datos locales:</strong> empuja todo lo que ya tenés guardado en este
+          navegador hacia el Sheet (usalo si acabás de conectar la URL o si ves que el Sheet quedó vacío pese a tener
+          días cargados acá).
+        </p>
+        <button class="btn secondary small" onclick="syncPushAll()">Subir datos locales a Sheets</button>
+      </div>
+      <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
+        <p class="config-note">
+          <strong style="color:var(--red);">Sincronizar ahora:</strong> trae los datos del Sheet y <strong>reemplaza</strong>
+          lo que tenés guardado acá. Usalo solo para traer cambios hechos desde otro dispositivo — si tu Sheet está vacío
+          esto te borra el historial local, así que primero subí los datos con el botón de arriba.
+        </p>
+        <button class="btn secondary small" onclick="syncPullAll()">Sincronizar ahora (trae del Sheet)</button>
+      </div>
     </div>
 
     <div class="card">
@@ -747,6 +762,39 @@ async function syncPullAll(){
     renderDailyTable(); renderWeeklyTable(); renderHistorialTable(); renderDashboard();
     alertToast('Sincronizado con Google Sheets');
   }catch(err){ alertToast('Error al sincronizar'); console.error(err); }
+}
+
+async function syncPushAll(){
+  const url = DATA.config.sheetsUrl;
+  if(!url){ alertToast('Configurá la URL de Apps Script primero'); return; }
+  const dailyEntries = Object.values(DATA.daily);
+  const weeklyEntries = Object.values(DATA.weekly);
+  const total = dailyEntries.length + weeklyEntries.length;
+  if(total === 0){ alertToast('No hay datos locales para subir'); return; }
+  const ok = confirm(`Se van a subir ${dailyEntries.length} día(s) y ${weeklyEntries.length} semana(s) a Google Sheets. Si ya existen filas con esas fechas en el Sheet, se sobrescriben. ¿Continuar?`);
+  if(!ok) return;
+  alertToast('Subiendo ' + total + ' registro(s)…');
+  let failed = 0;
+  for(const e of dailyEntries){
+    try{ await syncPushAwait('saveDaily', e); } catch(err){ failed++; }
+  }
+  for(const e of weeklyEntries){
+    try{ await syncPushAwait('saveWeekly', e); } catch(err){ failed++; }
+  }
+  alertToast(failed === 0 ? 'Listo, se subieron todos los registros' : `Subido con ${failed} error(es) — revisá la consola`);
+}
+
+// Igual que syncPush, pero propaga el error para que syncPushAll pueda contar fallos
+async function syncPushAwait(action, payload){
+  const url = DATA.config.sheetsUrl;
+  const res = await fetch(url, {
+    method:'POST',
+    headers: {'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({action, payload})
+  });
+  const json = await res.json();
+  if(!json.ok) throw new Error(json.error || 'fallo desconocido');
+  return json;
 }
 
 /* ================= ANALYSIS ================= */
