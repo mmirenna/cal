@@ -286,8 +286,9 @@
     <div class="card">
       <h2><span class="eyebrow">Registro semanal</span></h2>
       <div class="field">
-        <label>Semana (lunes de esa semana)</label>
+        <label id="w-fecha-label">Semana</label>
         <input type="date" id="w-fecha">
+        <p class="config-note" id="w-fecha-hint"></p>
       </div>
       <div class="grid2">
         <div class="field">
@@ -388,6 +389,31 @@
     </div>
 
     <div class="card">
+      <h2><span class="eyebrow">Semana</span></h2>
+      <p class="config-note">
+        Definí qué día arranca tu semana de registro (peso y cintura). Tiene sentido que coincida con el día que
+        te pesás — así cada "semana" del dashboard termina justo en tu pesaje, en vez de en un lunes arbitrario.
+      </p>
+      <div class="field">
+        <label>Día de inicio de semana</label>
+        <select id="c-week-start-day">
+          <option value="1">Lunes</option>
+          <option value="2">Martes</option>
+          <option value="3">Miércoles</option>
+          <option value="4">Jueves</option>
+          <option value="5">Viernes</option>
+          <option value="6">Sábado</option>
+          <option value="0">Domingo</option>
+        </select>
+      </div>
+      <button class="btn" onclick="saveConfig()">Guardar objetivos</button>
+      <p class="config-note">
+        Esto solo afecta a las semanas que cargues de acá en adelante — las que ya tenés guardadas quedan con el
+        inicio que tenían al momento de guardarlas, no se reordenan retroactivamente.
+      </p>
+    </div>
+
+    <div class="card">
       <h2><span class="eyebrow">Google Sheets (sincronización)</span></h2>
       <p class="config-note">
         Pegá acá la URL del Web App de Apps Script (ver instrucciones del script). Cada vez que guardes un día o una
@@ -455,7 +481,7 @@ function loadData(){
     try{ return JSON.parse(raw); }catch(e){}
   }
   return {
-    config:{ calTarget:2200, proteinTarget:160, deficitTarget:500, sheetsUrl:'' },
+    config:{ calTarget:2200, proteinTarget:160, deficitTarget:500, sheetsUrl:'', weekStartDay:3 },
     daily:{},
     weekly:{}
   };
@@ -488,7 +514,7 @@ function sanitizeDates(){
 
   const cleanWeekly = {};
   Object.entries(DATA.weekly).forEach(([k,v])=>{
-    const nk = mondayOf(normalizeDateKey(k));
+    const nk = weekStartOf(normalizeDateKey(k));
     if(nk !== k) changed = true;
     v.date = nk;
     cleanWeekly[nk] = v;
@@ -502,11 +528,15 @@ sanitizeDates();
 /* ================= HELPERS ================= */
 function isoDate(d){ return d.toISOString().slice(0,10); }
 function todayIso(){ return isoDate(new Date()); }
-function mondayOf(dateStr){
+// Calcula el inicio de la semana que contiene dateStr, según el día configurado
+// en Config (weekStartDay: 0=domingo, 1=lunes, ..., 6=sábado). Por defecto miércoles (3).
+function weekStartOf(dateStr){
   const d = new Date(dateStr + 'T00:00:00');
-  const day = d.getDay();
-  const diff = (day === 0 ? -6 : 1 - day);
-  d.setDate(d.getDate() + diff);
+  const startDay = (DATA.config.weekStartDay !== undefined && DATA.config.weekStartDay !== null)
+    ? DATA.config.weekStartDay : 3;
+  const day = d.getDay(); // 0-6, domingo=0
+  const diff = (day - startDay + 7) % 7;
+  d.setDate(d.getDate() - diff);
   return isoDate(d);
 }
 function addDays(dateStr, n){
@@ -737,7 +767,7 @@ function renderHistorialTable(){
 function saveWeekly(){
   let date = document.getElementById('w-fecha').value;
   if(!date){ alertToast('Elegí una fecha'); return; }
-  date = mondayOf(date);
+  date = weekStartOf(date);
   const existing = DATA.weekly[date];
   const hasExistingData = existing && (existing.weight != null || existing.waist != null);
   if(hasExistingData){
@@ -765,7 +795,7 @@ function renderWeeklyTable(){
   if(entries.length === 0){ wrap.innerHTML = '<p class="empty">Todavía no hay registros.</p>'; return; }
   const sorted = sortArray(entries, sortState.weekly.key, sortState.weekly.dir);
   let html = '<table><tr>'
-    + thSort('weekly', 'date', 'Semana (lunes)')
+    + thSort('weekly', 'date', 'Semana')
     + thSort('weekly', 'weight', 'Peso (kg)')
     + thSort('weekly', 'waist', 'Cintura (cm)')
     + '</tr>';
@@ -777,18 +807,31 @@ function renderWeeklyTable(){
 }
 
 /* ================= CONFIG ================= */
+const WEEKDAY_NAMES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+
 function loadConfigForm(){
   document.getElementById('c-cal-target').value = DATA.config.calTarget;
   document.getElementById('c-protein-target').value = DATA.config.proteinTarget;
   document.getElementById('c-deficit-target').value = DATA.config.deficitTarget;
   document.getElementById('c-sheets-url').value = DATA.config.sheetsUrl || '';
+  document.getElementById('c-week-start-day').value = (DATA.config.weekStartDay ?? 3);
   updateSyncStatus();
+  updateWeekFormHint();
+}
+function updateWeekFormHint(){
+  const startDay = DATA.config.weekStartDay ?? 3;
+  const label = document.getElementById('w-fecha-label');
+  const hint = document.getElementById('w-fecha-hint');
+  if(label) label.textContent = `Semana (empieza el ${WEEKDAY_NAMES[startDay]})`;
+  if(hint) hint.textContent = `Se autocompleta con el ${WEEKDAY_NAMES[startDay]} de la semana actual. Cambiá el día de inicio en Config si hace falta.`;
 }
 function saveConfig(){
   DATA.config.calTarget = parseFloat(document.getElementById('c-cal-target').value) || 2200;
   DATA.config.proteinTarget = parseFloat(document.getElementById('c-protein-target').value) || 160;
   DATA.config.deficitTarget = parseFloat(document.getElementById('c-deficit-target').value) || 500;
+  DATA.config.weekStartDay = parseInt(document.getElementById('c-week-start-day').value, 10);
   persist();
+  updateWeekFormHint();
   alertToast('Objetivos guardados');
 }
 function saveSheetsUrl(){
@@ -1305,7 +1348,7 @@ function alertToast(msg){
 /* ================= INIT ================= */
 function init(){
   document.getElementById('d-fecha').value = todayIso();
-  document.getElementById('w-fecha').value = mondayOf(todayIso());
+  document.getElementById('w-fecha').value = weekStartOf(todayIso());
   setTrain(false);
   loadConfigForm();
   renderDailyTable();
