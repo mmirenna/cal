@@ -178,7 +178,8 @@
     .kpi{padding:16px;} .kpi .lbl{font-size:11px;} .kpi .val{font-size:24px;} .kpi .sub{font-size:11px;}
   }
   .kpis{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:16px;}
-  @media (min-width:760px){ .kpis{grid-template-columns:repeat(4,1fr); gap:12px;} }
+  @media (min-width:760px){ .kpis{grid-template-columns:repeat(3,1fr); gap:12px;} }
+  @media (min-width:1080px){ .kpis{grid-template-columns:repeat(6,1fr);} }
 
   .beam-wrap{padding:22px 10px 10px;}
   .beam-labels{display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:12px; margin-bottom:10px; color:var(--muted);}
@@ -339,6 +340,11 @@
     <div class="card">
       <h2><span class="eyebrow">Tendencia</span> · déficit acumulado semanal (kcal)</h2>
       <canvas id="chart-deficit"></canvas>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">Tendencia</span> · calorías promedio semanales (ingeridas vs. Watch)</h2>
+      <canvas id="chart-calories"></canvas>
     </div>
 
     <div class="card">
@@ -981,6 +987,20 @@ function weeklyProteinAvg(weekMonday){
   return n>0 ? sum/n : null;
 }
 
+function weeklyCalAvg(weekMonday){
+  const days = [...Array(7)].map((_,i)=> addDays(weekMonday, i));
+  let sumIn=0, nIn=0, sumWatch=0, nWatch=0;
+  days.forEach(d=>{
+    const e = DATA.daily[d];
+    if(e && e.calIn != null){ sumIn += e.calIn; nIn++; }
+    if(e && e.calWatch != null){ sumWatch += e.calWatch; nWatch++; }
+  });
+  return {
+    calInAvg: nIn>0 ? sumIn/nIn : null,
+    calWatchAvg: nWatch>0 ? sumWatch/nWatch : null
+  };
+}
+
 function buildWeeklySeries(){
   const weeks = Object.keys(DATA.weekly).sort();
   const series = [];
@@ -988,6 +1008,7 @@ function buildWeeklySeries(){
     const w = DATA.weekly[wk];
     const def = weeklyDeficitAccumulated(wk);
     const proteinAvg = weeklyProteinAvg(wk);
+    const calAvg = weeklyCalAvg(wk);
     let expectedLossKg = def.accumulated != null ? def.accumulated / KCAL_PER_KG : null;
     let realLossKg = null, diffKg = null;
     if(idx > 0){
@@ -1000,6 +1021,7 @@ function buildWeeklySeries(){
     series.push({
       weekStart: wk, weight: w.weight, waist: w.waist,
       accumulated: def.accumulated, adherence: def.adherence, proteinAvg,
+      calInAvg: calAvg.calInAvg, calWatchAvg: calAvg.calWatchAvg,
       expectedLossKg, realLossKg, diffKg
     });
   });
@@ -1046,7 +1068,7 @@ function buildMonthlySeries(series){
 }
 
 /* ================= DASHBOARD RENDER ================= */
-let chartWeight, chartDeficit, chartWaist;
+let chartWeight, chartDeficit, chartCalories, chartWaist;
 
 function renderDashboard(){
   const series = buildWeeklySeries();
@@ -1078,6 +1100,16 @@ function renderKPIs(series){
   const avgDef = defN>0 ? defSum/defN : null;
   const avgProt = protN>0 ? protSum/protN : null;
 
+  // Últimas 4 semanas (o las que haya, si hay menos de 4 registradas)
+  const last4 = series.slice(-4);
+  const accVals4 = last4.map(s=>s.accumulated).filter(v=>v!=null);
+  const accSum4 = accVals4.length ? accVals4.reduce((a,b)=>a+b,0) : null;
+  const dailyTarget = DATA.config.deficitTarget || 500;
+  const target4 = dailyTarget * 7 * (accVals4.length || 1); // escala el objetivo a la cantidad de semanas realmente sumadas
+
+  const protVals4 = last4.map(s=>s.proteinAvg).filter(v=>v!=null);
+  const protAvg4 = protVals4.length ? protVals4.reduce((a,b)=>a+b,0)/protVals4.length : null;
+
   row.innerHTML = `
     <div class="kpi">
       <div class="lbl">Peso actual</div>
@@ -1097,6 +1129,16 @@ function renderKPIs(series){
     <div class="kpi">
       <div class="lbl">Proteína prom. (últ. 7 días)</div>
       <div class="val" style="color:${avgProt==null?'inherit':(avgProt>=DATA.config.proteinTarget*0.9?'var(--teal)':'var(--red)')}">${avgProt==null?'—':fmt(avgProt)+'g'}</div>
+      <div class="sub">objetivo: ${fmt(DATA.config.proteinTarget)}g</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">Déficit acum. (últ. 4 sem.)</div>
+      <div class="val" style="color:${deficitColor(accSum4, target4)}">${accSum4==null?'—':(accSum4>=0?'−':'+')+fmt(Math.abs(accSum4))+' kcal'}</div>
+      <div class="sub">objetivo: −${fmt(target4)} kcal</div>
+    </div>
+    <div class="kpi">
+      <div class="lbl">Proteína prom. (últ. 4 sem.)</div>
+      <div class="val" style="color:${protAvg4==null?'inherit':(protAvg4>=DATA.config.proteinTarget*0.9?'var(--teal)':'var(--red)')}">${protAvg4==null?'—':fmt(protAvg4)+'g'}</div>
       <div class="sub">objetivo: ${fmt(DATA.config.proteinTarget)}g</div>
     </div>
   `;
@@ -1144,6 +1186,7 @@ function renderCharts(series){
   const labels = series.map(s=>s.weekStart);
   if(chartWeight) chartWeight.destroy();
   if(chartDeficit) chartDeficit.destroy();
+  if(chartCalories) chartCalories.destroy();
   if(chartWaist) chartWaist.destroy();
 
   const chartOpts = {
@@ -1152,6 +1195,18 @@ function renderCharts(series){
     scales:{
       x:{ ticks:{ color:'#5f6773', font:{size:10} }, grid:{ color:'rgba(255,255,255,0.04)' } },
       y:{ ticks:{ color:'#5f6773', font:{size:10} }, grid:{ color:'rgba(255,255,255,0.06)' } }
+    }
+  };
+
+  // En un gráfico de barras, el alto de la barra tiene que ser proporcional al valor real,
+  // así que el eje Y siempre arranca en 0 (a diferencia de los de línea, que sí pueden
+  // autoescalar porque ahí lo que importa es la pendiente/tendencia, no el área).
+  const barChartOpts = {
+    responsive:true,
+    plugins:{ legend:{ labels:{ color:'#8b94a3', font:{family:'Inter'} } } },
+    scales:{
+      x:{ ticks:{ color:'#5f6773', font:{size:10} }, grid:{ color:'rgba(255,255,255,0.04)' } },
+      y:{ beginAtZero:true, ticks:{ color:'#5f6773', font:{size:10} }, grid:{ color:'rgba(255,255,255,0.06)' } }
     }
   };
 
@@ -1165,6 +1220,15 @@ function renderCharts(series){
   chartDeficit = new Chart(document.getElementById('chart-deficit'), {
     type:'bar',
     data:{ labels, datasets:[{ label:'Déficit acumulado (kcal)', data:series.map(s=>s.accumulated), backgroundColor:series.map(s=> deficitColor(s.accumulated, weeklyTarget)) }]},
+    options: barChartOpts
+  });
+
+  chartCalories = new Chart(document.getElementById('chart-calories'), {
+    type:'line',
+    data:{ labels, datasets:[
+      { label:'Ingeridas (prom. semanal)', data:series.map(s=>s.calInAvg), borderColor:'#4dd0c0', backgroundColor:'rgba(77,208,192,0.08)', tension:0.3, spanGaps:true },
+      { label:'Watch (prom. semanal)', data:series.map(s=>s.calWatchAvg), borderColor:'#f2a93c', backgroundColor:'rgba(242,169,60,0.08)', tension:0.3, spanGaps:true }
+    ]},
     options: chartOpts
   });
 
