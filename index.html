@@ -550,6 +550,11 @@ function addDays(dateStr, n){
   d.setDate(d.getDate() + n);
   return isoDate(d);
 }
+function daysBetween(dateA, dateB){
+  const a = new Date(dateA + 'T00:00:00');
+  const b = new Date(dateB + 'T00:00:00');
+  return Math.round((b - a) / 86400000);
+}
 function fmt(n, dec=0){
   if(n === null || n === undefined || isNaN(n)) return '—';
   return Number(n).toLocaleString('es-AR', {minimumFractionDigits:dec, maximumFractionDigits:dec});
@@ -964,8 +969,11 @@ async function syncPushAwait(action, payload){
 }
 
 /* ================= ANALYSIS ================= */
-function weeklyDeficitAccumulated(weekMonday){
-  const days = [...Array(7)].map((_,i)=> addDays(weekMonday, i));
+// numDays es la cantidad real de días entre este pesaje y el anterior (normalmente 7,
+// pero puede variar si te salteaste una semana o cambiaste el día de pesaje).
+function weeklyDeficitAccumulated(startDate, numDays){
+  numDays = numDays || 7;
+  const days = [...Array(numDays)].map((_,i)=> addDays(startDate, i));
   let sum = 0, count = 0, loggedDays = 0;
   days.forEach(d=>{
     const e = DATA.daily[d];
@@ -974,11 +982,12 @@ function weeklyDeficitAccumulated(weekMonday){
       if(e.calIn != null && e.calWatch != null){ sum += (e.calWatch - e.calIn); count++; }
     }
   });
-  return { accumulated: count>0 ? sum : null, daysWithData: count, adherence: Math.round((loggedDays/7)*100) };
+  return { accumulated: count>0 ? sum : null, daysWithData: count, adherence: Math.round((loggedDays/numDays)*100) };
 }
 
-function weeklyProteinAvg(weekMonday){
-  const days = [...Array(7)].map((_,i)=> addDays(weekMonday, i));
+function weeklyProteinAvg(startDate, numDays){
+  numDays = numDays || 7;
+  const days = [...Array(numDays)].map((_,i)=> addDays(startDate, i));
   let sum=0, n=0;
   days.forEach(d=>{
     const e = DATA.daily[d];
@@ -987,8 +996,9 @@ function weeklyProteinAvg(weekMonday){
   return n>0 ? sum/n : null;
 }
 
-function weeklyCalAvg(weekMonday){
-  const days = [...Array(7)].map((_,i)=> addDays(weekMonday, i));
+function weeklyCalAvg(startDate, numDays){
+  numDays = numDays || 7;
+  const days = [...Array(numDays)].map((_,i)=> addDays(startDate, i));
   let sumIn=0, nIn=0, sumWatch=0, nWatch=0;
   days.forEach(d=>{
     const e = DATA.daily[d];
@@ -1006,9 +1016,19 @@ function buildWeeklySeries(){
   const series = [];
   weeks.forEach((wk, idx)=>{
     const w = DATA.weekly[wk];
-    const def = weeklyDeficitAccumulated(wk);
-    const proteinAvg = weeklyProteinAvg(wk);
-    const calAvg = weeklyCalAvg(wk);
+    // La ventana de "esta fila" es el período ENTRE el pesaje anterior y este:
+    // es lo que realmente produjo el cambio de peso que se está comparando.
+    // Para la primera fila (sin pesaje anterior) no hay intervalo real que usar,
+    // así que se muestra el propio período de 7 días como mejor aproximación disponible.
+    let windowStart = wk, windowDays = 7;
+    if(idx > 0){
+      windowStart = weeks[idx-1];
+      windowDays = daysBetween(weeks[idx-1], wk);
+      if(windowDays <= 0) windowDays = 7; // salvaguarda ante fechas fuera de orden
+    }
+    const def = weeklyDeficitAccumulated(windowStart, windowDays);
+    const proteinAvg = weeklyProteinAvg(windowStart, windowDays);
+    const calAvg = weeklyCalAvg(windowStart, windowDays);
     let expectedLossKg = def.accumulated != null ? def.accumulated / KCAL_PER_KG : null;
     let realLossKg = null, diffKg = null;
     if(idx > 0){
