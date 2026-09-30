@@ -179,7 +179,7 @@
   }
   .kpis{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:16px;}
   @media (min-width:760px){ .kpis{grid-template-columns:repeat(3,1fr); gap:12px;} }
-  @media (min-width:1080px){ .kpis{grid-template-columns:repeat(6,1fr);} }
+  @media (min-width:1080px){ .kpis{grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));} }
 
   .beam-wrap{padding:22px 10px 10px;}
   .beam-labels{display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:12px; margin-bottom:10px; color:var(--muted);}
@@ -1048,6 +1048,26 @@ function buildWeeklySeries(){
   return series;
 }
 
+// Los días ya cargados después del último pesaje no tienen todavía una fila semanal
+// que los "cierre" (eso pasa recién cuando se carga el próximo pesaje). Sin esto,
+// esos días quedan invisibles en el gráfico y las tarjetas hasta ese momento.
+function computeOpenWeek(){
+  const weeks = Object.keys(DATA.weekly).sort();
+  if(weeks.length === 0) return null;
+  const lastWeekDate = weeks[weeks.length-1];
+  const today = todayIso();
+  const elapsed = daysBetween(lastWeekDate, today);
+  if(elapsed <= 0) return null; // el último pesaje ya es hoy (o una fecha rara a futuro)
+  const def = weeklyDeficitAccumulated(lastWeekDate, elapsed);
+  return {
+    since: lastWeekDate,
+    today,
+    daysElapsed: elapsed,
+    accumulated: def.accumulated,
+    adherence: def.adherence
+  };
+}
+
 function buildMonthlySeries(series){
   const months = {};
   series.forEach(s=>{
@@ -1092,16 +1112,17 @@ let chartWeight, chartDeficit, chartCalories, chartWaist;
 
 function renderDashboard(){
   const series = buildWeeklySeries();
-  renderKPIs(series);
+  const openWeek = computeOpenWeek();
+  renderKPIs(series, openWeek);
   renderBeam(series);
-  renderCharts(series);
+  renderCharts(series, openWeek);
   renderDashWeekly(series);
   renderDashMonthly(series);
   renderAlerts(series);
   renderRecommendation(series);
 }
 
-function renderKPIs(series){
+function renderKPIs(series, openWeek){
   const row = document.getElementById('kpi-row');
   if(series.length === 0){
     row.innerHTML = '<div class="kpi"><div class="lbl">Sin datos</div><div class="val" style="font-size:14px; color:var(--muted-2)">Cargá tu primera semana</div></div>';
@@ -1161,6 +1182,11 @@ function renderKPIs(series){
       <div class="val" style="color:${protAvg4==null?'inherit':(protAvg4>=DATA.config.proteinTarget*0.9?'var(--teal)':'var(--red)')}">${protAvg4==null?'—':fmt(protAvg4)+'g'}</div>
       <div class="sub">objetivo: ${fmt(DATA.config.proteinTarget)}g</div>
     </div>
+    <div class="kpi">
+      <div class="lbl">Déficit en curso (desde último pesaje)</div>
+      <div class="val" style="color:${openWeek ? deficitColor(openWeek.accumulated, (DATA.config.deficitTarget||500)*openWeek.daysElapsed) : 'inherit'}">${!openWeek || openWeek.accumulated==null ? '—' : (openWeek.accumulated>=0?'−':'+')+fmt(Math.abs(openWeek.accumulated))+' kcal'}</div>
+      <div class="sub">${openWeek ? `${openWeek.daysElapsed} día(s) desde el ${openWeek.since} · sin cerrar con pesaje` : 'sin pesajes cargados'}</div>
+    </div>
   `;
 }
 
@@ -1202,8 +1228,10 @@ function renderBeam(series){
   `;
 }
 
-function renderCharts(series){
+function renderCharts(series, openWeek){
   const labels = series.map(s=>s.weekStart);
+  const hasOpenBar = openWeek && openWeek.accumulated != null;
+  const chartLabels = hasOpenBar ? [...labels, `${openWeek.today} (en curso)`] : labels;
   if(chartWeight) chartWeight.destroy();
   if(chartDeficit) chartDeficit.destroy();
   if(chartCalories) chartCalories.destroy();
@@ -1237,9 +1265,18 @@ function renderCharts(series){
   });
 
   const weeklyTarget = (DATA.config.deficitTarget || 500) * 7;
+  const deficitData = series.map(s=>s.accumulated);
+  const deficitColors = series.map(s=> deficitColor(s.accumulated, weeklyTarget));
+  if(hasOpenBar){
+    deficitData.push(openWeek.accumulated);
+    // barra translúcida (hsla en vez de hsl) para marcar visualmente que todavía no está
+    // cerrada por un pesaje — el objetivo se escala a los días transcurridos, no a 7 fijos
+    const openTarget = (DATA.config.deficitTarget || 500) * openWeek.daysElapsed;
+    deficitColors.push(deficitColor(openWeek.accumulated, openTarget).replace('hsl(', 'hsla(').replace(')', ', 0.45)'));
+  }
   chartDeficit = new Chart(document.getElementById('chart-deficit'), {
     type:'bar',
-    data:{ labels, datasets:[{ label:'Déficit acumulado (kcal)', data:series.map(s=>s.accumulated), backgroundColor:series.map(s=> deficitColor(s.accumulated, weeklyTarget)) }]},
+    data:{ labels: chartLabels, datasets:[{ label:'Déficit acumulado (kcal)', data:deficitData, backgroundColor:deficitColors }]},
     options: barChartOpts
   });
 
